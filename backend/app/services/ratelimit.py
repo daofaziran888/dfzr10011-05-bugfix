@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.store import store
+from app.store import StoreError, store
 
 MODULE = "ratelimit"
 REQUIRED_FIELDS = ["规则编号", "目标站点", "请求间隔"]
@@ -43,13 +43,17 @@ class RatelimitService:
         entry["status"] = STATUS_ORDER[0]
         entry["pending"] = True
         entry["abnormal"] = False
-        rows.append(entry)
+        try:
+            store.append(MODULE, entry, owner=MODULE)
+        except StoreError as exc:
+            return None, [str(exc)]
         return entry, []
 
     def run_action(self, entry_id: int, action: str) -> tuple[dict[str, Any] | None, str]:
         entry = store.find(MODULE, entry_id)
         if entry is None:
             return None, f"频率规则 {entry_id} 不存在或已归档"
+        entry = dict(entry)
         if action not in ACTION_RULES:
             return None, f"动作「{action}」不属于采集频率控制可执行范围"
         target = ACTION_RULES[action]
@@ -58,4 +62,8 @@ class RatelimitService:
         entry["status"] = target
         entry["pending"] = target != STATUS_ORDER[-1]
         entry["abnormal"] = action in NEGATIVE_ACTIONS
+        try:
+            store.write_row(MODULE, entry_id, entry, owner=MODULE)
+        except StoreError as exc:
+            return None, str(exc)
         return entry, f"频率规则已{action}"

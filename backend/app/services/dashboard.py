@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.store import store
+from app.store import StoreError, store
 
 MODULE = "dashboard"
 REQUIRED_FIELDS = ["面板编号", "面板名称", "显示指标"]
@@ -43,13 +43,17 @@ class DashboardService:
         entry["status"] = STATUS_ORDER[0]
         entry["pending"] = True
         entry["abnormal"] = False
-        rows.append(entry)
+        try:
+            store.append(MODULE, entry, owner=MODULE)
+        except StoreError as exc:
+            return None, [str(exc)]
         return entry, []
 
     def run_action(self, entry_id: int, action: str) -> tuple[dict[str, Any] | None, str]:
         entry = store.find(MODULE, entry_id)
         if entry is None:
             return None, f"看板面板 {entry_id} 不存在或已归档"
+        entry = dict(entry)
         if action not in ACTION_RULES:
             return None, f"动作「{action}」不属于全局采集看板可执行范围"
         target = ACTION_RULES[action]
@@ -58,4 +62,8 @@ class DashboardService:
         entry["status"] = target
         entry["pending"] = target != STATUS_ORDER[-1]
         entry["abnormal"] = action in NEGATIVE_ACTIONS
+        try:
+            store.write_row(MODULE, entry_id, entry, owner=MODULE)
+        except StoreError as exc:
+            return None, str(exc)
         return entry, f"看板面板已{action}"
